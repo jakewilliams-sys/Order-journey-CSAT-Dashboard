@@ -474,6 +474,13 @@ def compute_statistical_tests(_processed_df, comparison_metrics, group_col):
 
 def main():
     """Main dashboard application."""
+    # Check for import errors first
+    if _import_error is not None:
+        st.error(f"❌ Error importing required modules: {str(_import_error)}")
+        st.exception(_import_error)
+        st.info("Please check that all required Python files are in the repository.")
+        return
+    
     st.title("📊 Order Journey CSAT Survey Analysis Dashboard")
     st.markdown("---")
     
