@@ -371,7 +371,9 @@ def generate_tracker_summary(processed_df: pd.DataFrame) -> List[str]:
 
 @st.cache_data
 def apply_filters(_processed_df, _original_df, order_type, plus_customer, customer_segment):
-    """Apply filters to the dataframes. Cached to avoid re-filtering on every render."""
+    """Apply filters to the dataframes. Cached to avoid re-filtering on every render.
+    The filter parameters (order_type, plus_customer, customer_segment) are part of the cache key,
+    so changing them will invalidate the cache."""
     filtered_processed = _processed_df.copy()
     filtered_original = _original_df.copy()
     
@@ -1030,31 +1032,62 @@ def main():
             filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}"
             
             # Group by Grocery/Restaurant
+            # Only show this comparison if filter is 'All' (otherwise we're comparing within a single group)
             if 'Grocery_Restaurant' in comparison_df.columns:
-                st.markdown("**Grocery vs Restaurant:**")
-                comp_df = compute_comparison_data(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
-                
-                if not comp_df.empty:
-                    color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
-                    fig = px.bar(
-                        comp_df,
-                        x='Metric',
-                        y='Mean',
-                        color='Group',
-                        title="Value Metrics Comparison by Order Type",
-                        barmode='group',
-                        text='Mean',
-                        color_discrete_map=color_map
-                    )
-                    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                # Check if we have multiple groups in the filtered data
+                unique_groups = comparison_df['Grocery_Restaurant'].dropna().unique()
+                if len(unique_groups) > 1 or selected_order_type == 'All':
+                    st.markdown("**Grocery vs Restaurant:**")
+                    comp_df = compute_comparison_data(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
                     
-                    # Statistical test
-                    test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
-                    if test_results:
-                        st.markdown("**Statistical Significance:**")
-                        for result in test_results:
-                            st.markdown(f"- **{result['metric_name']}:** t-statistic={result['t_stat']:.3f}, p-value={result['p_value']:.4f} {'(significant)' if result['p_value'] < 0.05 else '(not significant)'}")
+                    if not comp_df.empty:
+                        color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
+                        fig = px.bar(
+                            comp_df,
+                            x='Metric',
+                            y='Mean',
+                            color='Group',
+                            title="Value Metrics Comparison by Order Type",
+                            barmode='group',
+                            text='Mean',
+                            color_discrete_map=color_map
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Statistical test (only if we have 2+ groups)
+                        if len(unique_groups) >= 2:
+                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
+                            if test_results:
+                                st.markdown("**Statistical Significance:**")
+                                for result in test_results:
+                                    st.markdown(f"- **{result['metric_name']}:** t-statistic={result['t_stat']:.3f}, p-value={result['p_value']:.4f} {'(significant)' if result['p_value'] < 0.05 else '(not significant)'}")
+                else:
+                    # Only one group in filtered data - show single group metrics
+                    st.markdown(f"**Value Metrics for {unique_groups[0]}:**")
+                    single_group_data = []
+                    for metric_col, metric_name in value_comparison_metrics:
+                        if metric_col in comparison_df.columns:
+                            metric_data = comparison_df[metric_col].dropna()
+                            if len(metric_data) > 0:
+                                single_group_data.append({
+                                    'Metric': metric_name,
+                                    'Mean': metric_data.mean(),
+                                    'Count': len(metric_data)
+                                })
+                    
+                    if single_group_data:
+                        single_df = pd.DataFrame(single_group_data)
+                        fig = px.bar(
+                            single_df,
+                            x='Metric',
+                            y='Mean',
+                            title=f"Value Metrics for {unique_groups[0]}",
+                            text='Mean',
+                            color_discrete_sequence=[get_group_color(unique_groups[0])]
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
             
             # Plus Customer comparison
             if 'Plus_Customer' in comparison_df.columns:
