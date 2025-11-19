@@ -1318,10 +1318,18 @@ def main():
 
 # Streamlit runs the entire script, so call main() directly
 # (not wrapped in if __name__ == "__main__" which doesn't work on Streamlit Cloud)
-try:
-    main()
-except Exception as e:
-    st.error(f"An error occurred while starting the dashboard: {str(e)}")
-    st.exception(e)
-    st.stop()
+# Use a function wrapper to ensure Streamlit can start even if main() fails
+def run_app():
+    try:
+        main()
+    except FileNotFoundError as e:
+        st.error(f"File not found: {str(e)}")
+        st.info("Please ensure all required files are in the repository.")
+        st.exception(e)
+    except Exception as e:
+        st.error(f"An error occurred while starting the dashboard: {str(e)}")
+        st.exception(e)
+
+# Call the wrapper function
+run_app()
 
