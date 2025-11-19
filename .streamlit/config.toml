@@ -1,7 +1,6 @@
 [server]
 # Reduce reruns on scroll/hover
 runOnSave = true
-headless = false
 
 [browser]
 # Disable automatic browser opening (optional)
