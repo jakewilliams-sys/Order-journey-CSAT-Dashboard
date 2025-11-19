@@ -493,7 +493,17 @@ def main():
         st.error(f"❌ Data file '{data_file}' not found in the current directory.")
         st.info(f"Current directory: {os.getcwd()}")
         st.info("Please ensure the CSV file is in the same directory as dashboard.py")
-        st.stop()
+        st.info("**Available files in directory:**")
+        try:
+            files = os.listdir('.')
+            csv_files = [f for f in files if f.endswith('.csv')]
+            if csv_files:
+                st.write("CSV files found:", ', '.join(csv_files))
+            else:
+                st.write("No CSV files found in directory")
+        except Exception:
+            pass
+        return  # Return early instead of stopping
     
     try:
         with st.spinner("Loading and processing data..."):
