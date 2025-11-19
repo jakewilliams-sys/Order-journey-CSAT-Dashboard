@@ -7,6 +7,18 @@ import numpy as np
 from scipy import stats
 import plotly.graph_objects as go
 import plotly.express as px
+import nltk
+# Download NLTK data required for sentiment analysis BEFORE importing sentiment_analysis
+try:
+    nltk.download('vader_lexicon', quiet=True)
+except Exception:
+    # If download fails, try without quiet mode for better error messages
+    try:
+        nltk.download('vader_lexicon')
+    except Exception as e:
+        # Don't stop here - let it fail gracefully and show error in the app
+        pass
+
 import data_processing as dp
 import sentiment_analysis as sa
 import visualizations as viz
