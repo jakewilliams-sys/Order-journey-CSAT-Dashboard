@@ -1,0 +1,25 @@
+[server]
+# Reduce reruns on scroll/hover
+runOnSave = true
+headless = false
+
+[browser]
+# Disable automatic browser opening (optional)
+gatherUsageStats = false
+
+[client]
+# Optimize data serialization
+showErrorDetails = true
+
+[runner]
+# Optimize rerun behavior
+fastReruns = true
+magicEnabled = true
+
+[theme]
+primaryColor = "#1f77b4"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#262730"
+font = "sans serif"
+

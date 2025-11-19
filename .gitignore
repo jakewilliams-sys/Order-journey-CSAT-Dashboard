@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (uncomment if you want to exclude CSV files)
+# *.csv
+
+# Excel and Word docs (optional - uncomment if you don't want to include these)
+# *.xlsx
+# *.docx
+
+# Logs
+*.log
+
