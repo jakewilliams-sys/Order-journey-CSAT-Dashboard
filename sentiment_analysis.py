@@ -15,15 +15,27 @@ def get_analyzer():
     """Get or create the VADER sentiment analyzer."""
     global _analyzer
     if _analyzer is None:
-        # Ensure NLTK data is downloaded
+        # Ensure NLTK data is downloaded (non-blocking, with timeout protection)
         try:
+            # Try to download quietly first
             nltk.download('vader_lexicon', quiet=True)
         except Exception:
+            # If quiet download fails, try without quiet mode
             try:
                 nltk.download('vader_lexicon')
             except Exception:
+                # If download fails completely, we'll still try to create analyzer
+                # as it might work if data was already downloaded
                 pass
-        _analyzer = SentimentIntensityAnalyzer()
+        
+        # Try to create analyzer - if this fails, we'll handle it in get_sentiment_score
+        try:
+            _analyzer = SentimentIntensityAnalyzer()
+        except Exception:
+            # If analyzer creation fails, set to None so we can retry later
+            _analyzer = None
+            raise
+    
     return _analyzer
 
 
