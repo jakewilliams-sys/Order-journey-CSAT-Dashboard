@@ -230,20 +230,23 @@ def generate_value_summary(processed_df: pd.DataFrame, original_df: pd.DataFrame
             if len(sorted_factors) > 1:
                 summary.append(f"- **Top 3 Factors:** {', '.join([f'{f[0]} ({f[1]:.0f})' for f in sorted_factors])}")
     
-    # Bill Shock Analysis
+    # Bill Shock Analysis (only 4-5 ratings - bill shock is ONLY 4-5, not 1-3)
     if 'Bill_Shock_numeric' in processed_df.columns:
-        avg_bill_shock = processed_df['Bill_Shock_numeric'].mean()
-        high_shock = (processed_df['Bill_Shock_numeric'] >= 4).sum()
+        # Filter to only bill shock (4-5) - ratings 1-3 are NOT bill shock
+        bill_shock_data = processed_df[processed_df['Bill_Shock_numeric'] >= 4].copy()
+        high_shock = len(bill_shock_data)
         total_bill = processed_df['Bill_Shock_numeric'].notna().sum()
         
         summary.append(f"\n### Bill Expectation Analysis")
-        summary.append(f"- **Average Bill Shock Score:** {avg_bill_shock:.2f} out of 5")
+        if high_shock > 0:
+            avg_bill_shock = bill_shock_data['Bill_Shock_numeric'].mean()
+            summary.append(f"- **Average Bill Shock Score (4-5 only):** {avg_bill_shock:.2f} out of 5")
         if total_bill > 0:
-            summary.append(f"- **High Bill Shock (4-5):** {high_shock/total_bill*100:.1f}% of customers experienced bills higher than expected")
+            summary.append(f"- **Bill Shock (4-5 ONLY):** {high_shock/total_bill*100:.1f}% of customers experienced bills higher than expected (ratings 1-3 are NOT bill shock)")
         
-        # Bill Shock vs CSAT
-        if 'CSAT_numeric' in processed_df.columns:
-            both_values = processed_df[['Bill_Shock_numeric', 'CSAT_numeric']].dropna()
+        # Bill Shock vs CSAT (only 4-5 ratings)
+        if 'CSAT_numeric' in processed_df.columns and high_shock > 0:
+            both_values = bill_shock_data[['Bill_Shock_numeric', 'CSAT_numeric']].dropna()
             if len(both_values) > 0:
                 correlation = both_values.corr().iloc[0, 1]
                 if correlation < -0.3:
@@ -378,30 +381,35 @@ def apply_filters(_processed_df, _original_df, order_type, plus_customer, custom
     if order_type != 'All' and 'Grocery_Restaurant' in filtered_processed.columns:
         order_mask = filtered_processed['Grocery_Restaurant'] == order_type
         mask = mask & order_mask
-        if 'Grocery / Restaurant order' in filtered_original.columns:
-            filtered_original = filtered_original[filtered_original['Grocery / Restaurant order'] == order_type]
     
     if plus_customer != 'All' and 'Plus_Customer' in filtered_processed.columns:
         plus_mask = filtered_processed['Plus_Customer'] == plus_customer
         mask = mask & plus_mask
-        if 'Plus Customer' in filtered_original.columns:
-            filtered_original = filtered_original[filtered_original['Plus Customer'] == plus_customer]
     
     if customer_segment != 'All' and 'Customer_Segment' in filtered_processed.columns:
         segment_mask = filtered_processed['Customer_Segment'] == customer_segment
         mask = mask & segment_mask
-        if 'Customer Segment' in filtered_original.columns:
-            filtered_original = filtered_original[filtered_original['Customer Segment'] == customer_segment]
     
     # Apply the combined mask to ensure all columns (including mission columns) are filtered consistently
     filtered_processed = filtered_processed[mask].copy()
+    # Apply the same mask to filtered_original to ensure indices match
+    # Use reindex to handle cases where indices might not align perfectly
+    try:
+        filtered_original = filtered_original.loc[filtered_processed.index].copy()
+    except KeyError:
+        # If indices don't match, try to align by resetting index
+        filtered_processed_reset = filtered_processed.reset_index(drop=True)
+        filtered_original_reset = filtered_original.reset_index(drop=True)
+        filtered_original = filtered_original_reset.loc[filtered_processed_reset.index].copy()
+        filtered_processed = filtered_processed_reset
     
     return filtered_processed, filtered_original
 
 
 @st.cache_data
-def compute_driver_summary(_original_df, drivers):
-    """Compute driver performance summary. Cached to avoid recalculation on scroll."""
+def compute_driver_summary(_original_df, drivers, _filter_key):
+    """Compute driver performance summary. Cached to avoid recalculation on scroll.
+    _filter_key is used to ensure cache invalidation when filters change."""
     driver_summary = []
     for driver in drivers:
         if driver in _original_df.columns:
@@ -418,8 +426,9 @@ def compute_driver_summary(_original_df, drivers):
 
 
 @st.cache_data
-def compute_driver_csat(_processed_df, _original_df, drivers):
-    """Compute driver impact on CSAT. Cached to avoid recalculation on scroll."""
+def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
+    """Compute driver impact on CSAT. Cached to avoid recalculation on scroll.
+    _filter_key is used to ensure cache invalidation when filters change."""
     driver_csat = []
     if 'CSAT_numeric' not in _processed_df.columns:
         return pd.DataFrame()
@@ -440,8 +449,9 @@ def compute_driver_csat(_processed_df, _original_df, drivers):
 
 
 @st.cache_data
-def compute_comparison_data(_processed_df, comparison_metrics, group_col):
-    """Compute comparison data for group comparisons. Cached to avoid recalculation."""
+def compute_comparison_data(_processed_df, comparison_metrics, group_col, _filter_key):
+    """Compute comparison data for group comparisons. Cached to avoid recalculation.
+    _filter_key is used to ensure cache invalidation when filters change."""
     comparison_data = []
     if group_col not in _processed_df.columns:
         return pd.DataFrame()
@@ -460,8 +470,9 @@ def compute_comparison_data(_processed_df, comparison_metrics, group_col):
 
 
 @st.cache_data
-def compute_statistical_tests(_processed_df, comparison_metrics, group_col):
-    """Compute statistical tests. Cached to avoid recalculation on scroll."""
+def compute_statistical_tests(_processed_df, comparison_metrics, group_col, _filter_key):
+    """Compute statistical tests. Cached to avoid recalculation on scroll.
+    _filter_key is used to ensure cache invalidation when filters change."""
     results = []
     if group_col not in _processed_df.columns:
         return results
@@ -782,22 +793,50 @@ def main():
         
         with col1:
             st.markdown("**Bill Expectation/Shock:**")
-            st.markdown("*Measures whether the final bill matched customer expectations (from 'much less than expected' to 'much more than expected'). Bill shock is defined as customers who rated 4-5 (bills higher than expected).*")
+            st.markdown("*Bill shock is ONLY defined as customers who rated 4-5 (bills higher than expected). Ratings 1-3 are NOT bill shock and are excluded from this analysis.*")
             if 'Bill_Shock_numeric' in processed_df.columns:
-                fig = viz.create_distribution_chart(
-                    processed_df, 'Bill_Shock_numeric',
-                    "Bill Shock Distribution",
-                    "Score (1-5)"
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Bill shock by groups
-                if 'Grocery_Restaurant' in processed_df.columns:
-                    fig = viz.create_group_comparison_chart(
-                        processed_df, 'Bill_Shock_numeric', 'Grocery_Restaurant',
-                        title="Bill Shock by Order Type"
+                # Filter to only show 4-5 ratings (bill shock is ONLY 4-5, not 1-3)
+                bill_shock_filtered = processed_df[processed_df['Bill_Shock_numeric'] >= 4].copy()
+                if len(bill_shock_filtered) > 0:
+                    # Create a custom chart that only shows 4 and 5
+                    value_counts = bill_shock_filtered['Bill_Shock_numeric'].value_counts().sort_index()
+                    # Only keep 4 and 5
+                    value_counts = value_counts[value_counts.index >= 4]
+                    
+                    fig = go.Figure(data=[
+                        go.Bar(
+                            x=value_counts.index.astype(int),
+                            y=value_counts.values,
+                            marker=dict(
+                                color=COLOR_PALETTE['primary'][0],
+                                opacity=0.8
+                            ),
+                            text=value_counts.values,
+                            textposition='auto'
+                        )
+                    ])
+                    fig.update_layout(
+                        title="Bill Shock Distribution (4-5 Only)",
+                        xaxis_title="Bill Shock Score (4-5 = Bills higher than expected)",
+                        yaxis_title="Count",
+                        xaxis=dict(
+                            dtick=1,
+                            tickmode='linear',
+                            tick0=4,
+                            range=[3.5, 5.5]
+                        )
                     )
                     st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Bill shock by groups
+                    if 'Grocery_Restaurant' in bill_shock_filtered.columns:
+                        fig = viz.create_group_comparison_chart(
+                            bill_shock_filtered, 'Bill_Shock_numeric', 'Grocery_Restaurant',
+                            title="Bill Shock by Order Type (4-5 Only)"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No customers with bill shock (ratings 4-5) found in the filtered data.")
         
         with col2:
             st.markdown("**Order Mission Reasons:**")
@@ -809,10 +848,11 @@ def main():
         
         # Relationship analysis
         st.markdown("**Bill Shock vs CSAT:**")
-        st.markdown("*This scatter plot shows how customers' bill expectations (whether the final cost matched what they expected) relate to their overall satisfaction. Each point represents one customer. A negative correlation suggests that unexpected costs (bill shock) may reduce satisfaction.*")
+        st.markdown("*This scatter plot shows how bill shock (ratings 4-5 ONLY) relates to overall satisfaction. Ratings 1-3 are NOT bill shock and are excluded. Each point represents one customer with bill shock. A negative correlation suggests that unexpected costs reduce satisfaction.*")
         if 'Bill_Shock_numeric' in processed_df.columns and 'CSAT_numeric' in processed_df.columns:
-            # Filter to only rows with both values
-            both_values = processed_df[['Bill_Shock_numeric', 'CSAT_numeric']].dropna()
+            # Filter to only rows with both values and bill shock (4-5)
+            bill_shock_data = processed_df[processed_df['Bill_Shock_numeric'] >= 4].copy()
+            both_values = bill_shock_data[['Bill_Shock_numeric', 'CSAT_numeric']].dropna()
             if len(both_values) > 0:
                 correlation = both_values.corr().iloc[0, 1]
                 
@@ -867,12 +907,18 @@ def main():
                 ))
                 
                 fig.update_layout(
-                    title="Bill Expectation vs Customer Satisfaction",
-                    xaxis_title="Bill Shock Score (1 = Much less than expected, 5 = Much more than expected)",
+                    title="Bill Expectation vs Customer Satisfaction (Bill Shock 4-5 Only)",
+                    xaxis_title="Bill Shock Score (4-5 = Bills higher than expected)",
                     yaxis_title="CSAT Score (1 = Very Dissatisfied, 5 = Very Satisfied)",
                     hovermode='x unified',
                     showlegend=True,
-                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+                    xaxis=dict(
+                        dtick=1,
+                        tickmode='linear',
+                        tick0=4,
+                        range=[3.5, 5.5]
+                    )
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
@@ -899,7 +945,9 @@ def main():
             st.markdown("*Shows the percentage of customers who answered 'Yes' for each driver (e.g., right temperature, good portion size, great quality).*")
             
             # Create driver summary using cached function
-            driver_df = compute_driver_summary(original_df, drivers)
+            # Create a filter key to ensure cache updates when filters change
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}"
+            driver_df = compute_driver_summary(original_df, drivers, filter_key)
             
             # Yes percentage chart
             if not driver_df.empty:
@@ -934,7 +982,7 @@ def main():
             # Driver impact on CSAT
             st.markdown("**Driver Impact on CSAT:**")
             st.markdown("*Compares average CSAT scores for customers who answered 'Yes' vs 'No' for each driver, showing which drivers have the biggest impact on satisfaction.*")
-            driver_csat_df = compute_driver_csat(processed_df, original_df, drivers)
+            driver_csat_df = compute_driver_csat(processed_df, original_df, drivers, filter_key)
             
             if not driver_csat_df.empty:
                 fig = go.Figure()
@@ -961,7 +1009,7 @@ def main():
         
         # Value-related Group Comparisons
         st.subheader("Value-Related Group Comparisons")
-        st.markdown("*Statistical comparisons across customer segments for value-related metrics (Value Score, Bill Shock).*")
+        st.markdown("*Statistical comparisons across customer segments for value-related metrics (Value Score, Bill Shock). Note: Bill Shock is ONLY ratings 4-5 - ratings 1-3 are NOT bill shock and are excluded.*")
         
         # Comparison metrics for value
         value_comparison_metrics = []
@@ -970,11 +1018,21 @@ def main():
         if 'Bill_Shock_numeric' in processed_df.columns:
             value_comparison_metrics.append(('Bill_Shock_numeric', 'Bill Shock Score'))
         
+        # Filter processed_df for bill shock comparisons (only 4-5)
+        # Create a copy where bill shock values < 4 are set to NaN so they're excluded from comparisons
+        comparison_df = processed_df.copy()
+        if 'Bill_Shock_numeric' in comparison_df.columns:
+            # For bill shock comparisons, only include 4-5 ratings by setting others to NaN
+            comparison_df.loc[comparison_df['Bill_Shock_numeric'] < 4, 'Bill_Shock_numeric'] = np.nan
+        
         if value_comparison_metrics:
+            # Create filter key for cache invalidation
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}"
+            
             # Group by Grocery/Restaurant
-            if 'Grocery_Restaurant' in processed_df.columns:
+            if 'Grocery_Restaurant' in comparison_df.columns:
                 st.markdown("**Grocery vs Restaurant:**")
-                comp_df = compute_comparison_data(processed_df, value_comparison_metrics, 'Grocery_Restaurant')
+                comp_df = compute_comparison_data(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
                 
                 if not comp_df.empty:
                     color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
@@ -992,16 +1050,16 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
                     
                     # Statistical test
-                    test_results = compute_statistical_tests(processed_df, value_comparison_metrics, 'Grocery_Restaurant')
+                    test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
                     if test_results:
                         st.markdown("**Statistical Significance:**")
                         for result in test_results:
                             st.markdown(f"- **{result['metric_name']}:** t-statistic={result['t_stat']:.3f}, p-value={result['p_value']:.4f} {'(significant)' if result['p_value'] < 0.05 else '(not significant)'}")
             
             # Plus Customer comparison
-            if 'Plus_Customer' in processed_df.columns:
+            if 'Plus_Customer' in comparison_df.columns:
                 st.markdown("**Plus vs Non-Plus Customers:**")
-                comp_df_raw = compute_comparison_data(processed_df, value_comparison_metrics, 'Plus_Customer')
+                comp_df_raw = compute_comparison_data(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
                 
                 if not comp_df_raw.empty:
                     # Map Yes/No to Plus/PAYG for display
@@ -1023,7 +1081,7 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
                     
                     # Statistical test
-                    test_results = compute_statistical_tests(processed_df, value_comparison_metrics, 'Plus_Customer')
+                    test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
                     if test_results:
                         st.markdown("**Statistical Significance:**")
                         for result in test_results:
@@ -1110,106 +1168,68 @@ def main():
         
         # Tracker Questions Overview
         st.subheader("Tracker Questions Overview")
-        st.markdown("*Average scores across all 5 tracker questions, showing overall satisfaction with order tracking features.*")
-        tracker_data = []
+        st.markdown("*Shows the percentage of customers who selected each rating (1-5) for each tracker question.*")
+        
+        # Rating Distribution Chart
+        st.markdown("**Rating Distribution by Question:**")
+        st.markdown("*Shows the percentage of customers who selected each rating (1-5) for each tracker question.*")
+        
+        # Collect rating distribution data
+        rating_dist_data = []
         for question, col_name in tracker_questions:
             if col_name in processed_df.columns:
-                avg_score = processed_df[col_name].mean()
-                tracker_data.append({
-                    'Question': question,
-                    'Average Score': avg_score
-                })
+                # Get value counts for each rating (1-5)
+                value_counts = processed_df[col_name].value_counts().sort_index()
+                total = processed_df[col_name].notna().sum()
+                
+                # Calculate percentages for each rating
+                for rating in range(1, 6):
+                    count = value_counts.get(rating, 0)
+                    pct = (count / total * 100) if total > 0 else 0
+                    rating_dist_data.append({
+                        'Question': question[:50] + '...' if len(question) > 50 else question,  # Truncate long questions
+                        'Rating': rating,
+                        'Percentage': pct,
+                        'Count': count
+                    })
         
-        if tracker_data:
-            tracker_df = pd.DataFrame(tracker_data)
-            num_questions = len(tracker_df)
-            # Use single color if more than 5 questions, otherwise use varied colors
-            if num_questions > 5:
-                bar_color = COLOR_PALETTE['primary'][0]  # Use primary blue
-            else:
-                colors = COLOR_PALETTE['primary'][:num_questions] if num_questions <= len(COLOR_PALETTE['primary']) else COLOR_PALETTE['primary'] * (num_questions // len(COLOR_PALETTE['primary']) + 1)
-                bar_color = colors[:num_questions] if num_questions <= 5 else COLOR_PALETTE['primary'][0]
+        if rating_dist_data:
+            rating_dist_df = pd.DataFrame(rating_dist_data)
             
-            fig = go.Figure(data=[
-                go.Bar(
-                    x=tracker_df['Question'],
-                    y=tracker_df['Average Score'],
-                    marker=dict(
-                        color=bar_color,
-                        opacity=0.8
-                    ),
-                    text=tracker_df['Average Score'].round(2),
-                    textposition='auto'
-                )
-            ])
+            # Create grouped bar chart
+            fig = go.Figure()
+            
+            # Add a bar for each rating (1-5)
+            ratings = sorted(rating_dist_df['Rating'].unique())
+            colors_map = {1: '#d62728', 2: '#ff7f0e', 3: '#bcbd22', 4: '#2ca02c', 5: '#1f77b4'}  # Red to Blue gradient
+            
+            for rating in ratings:
+                rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
+                fig.add_trace(go.Bar(
+                    name=f'Rating {rating}',
+                    x=rating_data['Question'],
+                    y=rating_data['Percentage'],
+                    marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
+                    text=[f'{p:.1f}%<br>({c})' for p, c in zip(rating_data['Percentage'], rating_data['Count'])],
+                    textposition='auto',
+                    hovertemplate='Question: %{x}<br>Rating: ' + str(rating) + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
+                    customdata=rating_data['Count']
+                ))
+            
             fig.update_layout(
-                title="Average Scores by Tracker Question",
+                title="Rating Distribution by Tracker Question",
                 xaxis_title="Question",
-                yaxis_title="Average Score (1-5)",
-                xaxis_tickangle=-45
+                yaxis_title="Percentage of Responses (%)",
+                barmode='group',
+                xaxis_tickangle=-45,
+                legend=dict(title="Rating")
             )
             st.plotly_chart(fig, use_container_width=True)
-            
-            # Rating Distribution Chart
-            st.markdown("**Rating Distribution by Question:**")
-            st.markdown("*Shows the percentage of customers who selected each rating (1-5) for each tracker question.*")
-            
-            # Collect rating distribution data
-            rating_dist_data = []
-            for question, col_name in tracker_questions:
-                if col_name in processed_df.columns:
-                    # Get value counts for each rating (1-5)
-                    value_counts = processed_df[col_name].value_counts().sort_index()
-                    total = processed_df[col_name].notna().sum()
-                    
-                    # Calculate percentages for each rating
-                    for rating in range(1, 6):
-                        count = value_counts.get(rating, 0)
-                        pct = (count / total * 100) if total > 0 else 0
-                        rating_dist_data.append({
-                            'Question': question[:50] + '...' if len(question) > 50 else question,  # Truncate long questions
-                            'Rating': rating,
-                            'Percentage': pct,
-                            'Count': count
-                        })
-            
-            if rating_dist_data:
-                rating_dist_df = pd.DataFrame(rating_dist_data)
-                
-                # Create grouped bar chart
-                fig = go.Figure()
-                
-                # Add a bar for each rating (1-5)
-                ratings = sorted(rating_dist_df['Rating'].unique())
-                colors_map = {1: '#d62728', 2: '#ff7f0e', 3: '#bcbd22', 4: '#2ca02c', 5: '#1f77b4'}  # Red to Blue gradient
-                
-                for rating in ratings:
-                    rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
-                    fig.add_trace(go.Bar(
-                        name=f'Rating {rating}',
-                        x=rating_data['Question'],
-                        y=rating_data['Percentage'],
-                        marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
-                        text=[f'{p:.1f}%<br>({c})' for p, c in zip(rating_data['Percentage'], rating_data['Count'])],
-                        textposition='auto',
-                        hovertemplate='Question: %{x}<br>Rating: ' + str(rating) + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
-                        customdata=rating_data['Count']
-                    ))
-                
-                fig.update_layout(
-                    title="Rating Distribution by Tracker Question",
-                    xaxis_title="Question",
-                    yaxis_title="Percentage of Responses (%)",
-                    barmode='group',
-                    xaxis_tickangle=-45,
-                    legend=dict(title="Rating")
-                )
-                st.plotly_chart(fig, use_container_width=True)
         
         # Tracker by Groups
         st.subheader("Tracker Scores by Groups")
         st.markdown("*Compares tracker satisfaction scores between different customer groups to identify if tracking experience differs by segment.*")
-        if 'Grocery_Restaurant' in processed_df.columns and tracker_data:
+        if 'Grocery_Restaurant' in processed_df.columns and tracker_questions:
             group_tracker = []
             for question, col_name in tracker_questions:
                 if col_name in processed_df.columns:
@@ -1249,7 +1269,7 @@ def main():
         # Tracker vs CSAT Relationship
         st.subheader("Tracker Satisfaction vs CSAT")
         st.markdown("*Examines how tracker satisfaction relates to overall CSAT scores.*")
-        if tracker_data and 'CSAT_numeric' in processed_df.columns:
+        if tracker_questions and 'CSAT_numeric' in processed_df.columns:
             # Calculate average tracker score per customer
             tracker_cols = [col for _, col in tracker_questions if col in processed_df.columns]
             if tracker_cols:
