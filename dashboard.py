@@ -2,6 +2,15 @@
 Main Streamlit dashboard for CSAT Survey Analysis.
 """
 import streamlit as st
+
+# Page configuration - MUST be the first Streamlit command
+st.set_page_config(
+    page_title="CSAT Survey Analysis Dashboard",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -26,15 +35,6 @@ from typing import Dict, List
 
 # Import color utilities
 from visualizations import COLOR_PALETTE, get_group_color
-
-
-# Page configuration
-st.set_page_config(
-    page_title="CSAT Survey Analysis Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Cache data loading
 @st.cache_data(ttl=3600)  # Cache for 1 hour, but will refresh on code changes
@@ -485,6 +485,14 @@ def main():
     
     # Load data
     data_file = "OJ CSAT Trial.csv"
+    
+    # Check if file exists first
+    import os
+    if not os.path.exists(data_file):
+        st.error(f"❌ Data file '{data_file}' not found in the current directory.")
+        st.info(f"Current directory: {os.getcwd()}")
+        st.info("Please ensure the CSV file is in the same directory as dashboard.py")
+        st.stop()
     
     try:
         with st.spinner("Loading and processing data..."):
