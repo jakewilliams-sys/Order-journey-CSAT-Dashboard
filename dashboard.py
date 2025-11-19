@@ -1316,11 +1316,12 @@ def main():
         st.exception(e)
 
 
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        st.error(f"An error occurred while starting the dashboard: {str(e)}")
-        st.exception(e)
-        st.stop()
+# Streamlit runs the entire script, so call main() directly
+# (not wrapped in if __name__ == "__main__" which doesn't work on Streamlit Cloud)
+try:
+    main()
+except Exception as e:
+    st.error(f"An error occurred while starting the dashboard: {str(e)}")
+    st.exception(e)
+    st.stop()
 
