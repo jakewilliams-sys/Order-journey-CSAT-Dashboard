@@ -19,7 +19,8 @@ import plotly.express as px
 from typing import Dict, List
 
 # Import modules - NLTK download will happen lazily in sentiment_analysis when needed
-# Wrap imports in try-except to prevent silent failures
+# Wrap imports in try-except to prevent silent failures, but don't stop - let Streamlit start
+_import_error = None
 try:
     import data_processing as dp
     import sentiment_analysis as sa
@@ -27,9 +28,7 @@ try:
     # Import color utilities
     from visualizations import COLOR_PALETTE, get_group_color
 except Exception as e:
-    st.error(f"Error importing modules: {str(e)}")
-    st.exception(e)
-    st.stop()
+    _import_error = e
 
 # Cache data loading
 @st.cache_data(ttl=3600)  # Cache for 1 hour, but will refresh on code changes
