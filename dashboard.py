@@ -372,20 +372,29 @@ def apply_filters(_processed_df, _original_df, order_type, plus_customer, custom
     filtered_processed = _processed_df.copy()
     filtered_original = _original_df.copy()
     
+    # Create a boolean mask for all filters
+    mask = pd.Series([True] * len(filtered_processed), index=filtered_processed.index)
+    
     if order_type != 'All' and 'Grocery_Restaurant' in filtered_processed.columns:
-        filtered_processed = filtered_processed[filtered_processed['Grocery_Restaurant'] == order_type]
+        order_mask = filtered_processed['Grocery_Restaurant'] == order_type
+        mask = mask & order_mask
         if 'Grocery / Restaurant order' in filtered_original.columns:
             filtered_original = filtered_original[filtered_original['Grocery / Restaurant order'] == order_type]
     
     if plus_customer != 'All' and 'Plus_Customer' in filtered_processed.columns:
-        filtered_processed = filtered_processed[filtered_processed['Plus_Customer'] == plus_customer]
+        plus_mask = filtered_processed['Plus_Customer'] == plus_customer
+        mask = mask & plus_mask
         if 'Plus Customer' in filtered_original.columns:
             filtered_original = filtered_original[filtered_original['Plus Customer'] == plus_customer]
     
     if customer_segment != 'All' and 'Customer_Segment' in filtered_processed.columns:
-        filtered_processed = filtered_processed[filtered_processed['Customer_Segment'] == customer_segment]
+        segment_mask = filtered_processed['Customer_Segment'] == customer_segment
+        mask = mask & segment_mask
         if 'Customer Segment' in filtered_original.columns:
             filtered_original = filtered_original[filtered_original['Customer Segment'] == customer_segment]
+    
+    # Apply the combined mask to ensure all columns (including mission columns) are filtered consistently
+    filtered_processed = filtered_processed[mask].copy()
     
     return filtered_processed, filtered_original
 
@@ -773,7 +782,7 @@ def main():
         
         with col1:
             st.markdown("**Bill Expectation/Shock:**")
-            st.markdown("*Measures whether the final bill matched customer expectations (from 'much less than expected' to 'much more than expected').*")
+            st.markdown("*Measures whether the final bill matched customer expectations (from 'much less than expected' to 'much more than expected'). Bill shock is defined as customers who rated 4-5 (bills higher than expected).*")
             if 'Bill_Shock_numeric' in processed_df.columns:
                 fig = viz.create_distribution_chart(
                     processed_df, 'Bill_Shock_numeric',
@@ -1140,6 +1149,62 @@ def main():
                 xaxis_tickangle=-45
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # Rating Distribution Chart
+            st.markdown("**Rating Distribution by Question:**")
+            st.markdown("*Shows the percentage of customers who selected each rating (1-5) for each tracker question.*")
+            
+            # Collect rating distribution data
+            rating_dist_data = []
+            for question, col_name in tracker_questions:
+                if col_name in processed_df.columns:
+                    # Get value counts for each rating (1-5)
+                    value_counts = processed_df[col_name].value_counts().sort_index()
+                    total = processed_df[col_name].notna().sum()
+                    
+                    # Calculate percentages for each rating
+                    for rating in range(1, 6):
+                        count = value_counts.get(rating, 0)
+                        pct = (count / total * 100) if total > 0 else 0
+                        rating_dist_data.append({
+                            'Question': question[:50] + '...' if len(question) > 50 else question,  # Truncate long questions
+                            'Rating': rating,
+                            'Percentage': pct,
+                            'Count': count
+                        })
+            
+            if rating_dist_data:
+                rating_dist_df = pd.DataFrame(rating_dist_data)
+                
+                # Create grouped bar chart
+                fig = go.Figure()
+                
+                # Add a bar for each rating (1-5)
+                ratings = sorted(rating_dist_df['Rating'].unique())
+                colors_map = {1: '#d62728', 2: '#ff7f0e', 3: '#bcbd22', 4: '#2ca02c', 5: '#1f77b4'}  # Red to Blue gradient
+                
+                for rating in ratings:
+                    rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
+                    fig.add_trace(go.Bar(
+                        name=f'Rating {rating}',
+                        x=rating_data['Question'],
+                        y=rating_data['Percentage'],
+                        marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
+                        text=[f'{p:.1f}%<br>({c})' for p, c in zip(rating_data['Percentage'], rating_data['Count'])],
+                        textposition='auto',
+                        hovertemplate='Question: %{x}<br>Rating: ' + str(rating) + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
+                        customdata=rating_data['Count']
+                    ))
+                
+                fig.update_layout(
+                    title="Rating Distribution by Tracker Question",
+                    xaxis_title="Question",
+                    yaxis_title="Percentage of Responses (%)",
+                    barmode='group',
+                    xaxis_tickangle=-45,
+                    legend=dict(title="Rating")
+                )
+                st.plotly_chart(fig, use_container_width=True)
         
         # Tracker by Groups
         st.subheader("Tracker Scores by Groups")
