@@ -6,10 +6,25 @@ import numpy as np
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import re
 from typing import Dict, List, Tuple
+import nltk
 
+# Initialize VADER sentiment analyzer lazily
+_analyzer = None
 
-# Initialize VADER sentiment analyzer
-analyzer = SentimentIntensityAnalyzer()
+def get_analyzer():
+    """Get or create the VADER sentiment analyzer."""
+    global _analyzer
+    if _analyzer is None:
+        # Ensure NLTK data is downloaded
+        try:
+            nltk.download('vader_lexicon', quiet=True)
+        except Exception:
+            try:
+                nltk.download('vader_lexicon')
+            except Exception:
+                pass
+        _analyzer = SentimentIntensityAnalyzer()
+    return _analyzer
 
 
 def get_sentiment_score(text: str) -> Dict[str, float]:
@@ -17,7 +32,12 @@ def get_sentiment_score(text: str) -> Dict[str, float]:
     if pd.isna(text) or text == '':
         return {'compound': 0.0, 'pos': 0.0, 'neu': 0.0, 'neg': 0.0}
     
-    return analyzer.polarity_scores(str(text))
+    try:
+        analyzer = get_analyzer()
+        return analyzer.polarity_scores(str(text))
+    except Exception:
+        # If sentiment analysis fails, return neutral scores
+        return {'compound': 0.0, 'pos': 0.0, 'neu': 1.0, 'neg': 0.0}
 
 
 def classify_sentiment(compound_score: float) -> str:

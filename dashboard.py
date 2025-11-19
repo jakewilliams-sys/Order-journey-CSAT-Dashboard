@@ -1314,5 +1314,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"An error occurred while starting the dashboard: {str(e)}")
+        st.exception(e)
+        st.stop()
 
