@@ -1022,6 +1022,7 @@ def main():
         
         # Filter processed_df for bill shock comparisons (only 4-5)
         # Create a copy where bill shock values < 4 are set to NaN so they're excluded from comparisons
+        # Note: processed_df is already filtered by apply_filters, so comparison_df will also be filtered
         comparison_df = processed_df.copy()
         if 'Bill_Shock_numeric' in comparison_df.columns:
             # For bill shock comparisons, only include 4-5 ratings by setting others to NaN
@@ -1029,7 +1030,8 @@ def main():
         
         if value_comparison_metrics:
             # Create filter key for cache invalidation
-            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}"
+            # Include a hash of the dataframe to ensure cache invalidates when data changes
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{len(comparison_df)}"
             
             # Group by Grocery/Restaurant
             # Only show this comparison if filter is 'All' (otherwise we're comparing within a single group)
@@ -1091,34 +1093,65 @@ def main():
             
             # Plus Customer comparison
             if 'Plus_Customer' in comparison_df.columns:
-                st.markdown("**Plus vs Non-Plus Customers:**")
-                comp_df_raw = compute_comparison_data(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
-                
-                if not comp_df_raw.empty:
-                    # Map Yes/No to Plus/PAYG for display
-                    group_label_map = {'Yes': 'Plus', 'No': 'PAYG'}
-                    comp_df = comp_df_raw.copy()
-                    comp_df['Group'] = comp_df['Group'].map(group_label_map).fillna(comp_df['Group'])
-                    color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
-                    fig = px.bar(
-                        comp_df,
-                        x='Metric',
-                        y='Mean',
-                        color='Group',
-                        title="Value Metrics Comparison by Plus Customer Status",
-                        barmode='group',
-                        text='Mean',
-                        color_discrete_map=color_map
-                    )
-                    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-                    st.plotly_chart(fig, use_container_width=True)
+                # Check if we have multiple groups in the filtered data
+                unique_plus_groups = comparison_df['Plus_Customer'].dropna().unique()
+                if len(unique_plus_groups) > 1 or selected_plus == 'All':
+                    st.markdown("**Plus vs Non-Plus Customers:**")
+                    comp_df_raw = compute_comparison_data(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
                     
-                    # Statistical test
-                    test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
-                    if test_results:
-                        st.markdown("**Statistical Significance:**")
-                        for result in test_results:
-                            st.markdown(f"- **{result['metric_name']}:** t-statistic={result['t_stat']:.3f}, p-value={result['p_value']:.4f} {'(significant)' if result['p_value'] < 0.05 else '(not significant)'}")
+                    if not comp_df_raw.empty:
+                        # Map Yes/No to Plus/PAYG for display
+                        group_label_map = {'Yes': 'Plus', 'No': 'PAYG'}
+                        comp_df = comp_df_raw.copy()
+                        comp_df['Group'] = comp_df['Group'].map(group_label_map).fillna(comp_df['Group'])
+                        color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
+                        fig = px.bar(
+                            comp_df,
+                            x='Metric',
+                            y='Mean',
+                            color='Group',
+                            title="Value Metrics Comparison by Plus Customer Status",
+                            barmode='group',
+                            text='Mean',
+                            color_discrete_map=color_map
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Statistical test (only if we have 2+ groups)
+                        if len(unique_plus_groups) >= 2:
+                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
+                            if test_results:
+                                st.markdown("**Statistical Significance:**")
+                                for result in test_results:
+                                    st.markdown(f"- **{result['metric_name']}:** t-statistic={result['t_stat']:.3f}, p-value={result['p_value']:.4f} {'(significant)' if result['p_value'] < 0.05 else '(not significant)'}")
+                else:
+                    # Only one group in filtered data - show single group metrics
+                    group_label = 'Plus' if unique_plus_groups[0] == 'Yes' else 'PAYG'
+                    st.markdown(f"**Value Metrics for {group_label} Customers:**")
+                    single_group_data = []
+                    for metric_col, metric_name in value_comparison_metrics:
+                        if metric_col in comparison_df.columns:
+                            metric_data = comparison_df[metric_col].dropna()
+                            if len(metric_data) > 0:
+                                single_group_data.append({
+                                    'Metric': metric_name,
+                                    'Mean': metric_data.mean(),
+                                    'Count': len(metric_data)
+                                })
+                    
+                    if single_group_data:
+                        single_df = pd.DataFrame(single_group_data)
+                        fig = px.bar(
+                            single_df,
+                            x='Metric',
+                            y='Mean',
+                            title=f"Value Metrics for {group_label} Customers",
+                            text='Mean',
+                            color_discrete_sequence=[get_group_color(unique_plus_groups[0])]
+                        )
+                        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                        st.plotly_chart(fig, use_container_width=True)
         
         # Value-related Sentiment Themes
         st.subheader("Value-Related Sentiment Themes")
