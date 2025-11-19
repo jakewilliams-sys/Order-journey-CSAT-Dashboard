@@ -16,15 +16,20 @@ import numpy as np
 from scipy import stats
 import plotly.graph_objects as go
 import plotly.express as px
-
-# Import modules - NLTK download will happen lazily in sentiment_analysis when needed
-import data_processing as dp
-import sentiment_analysis as sa
-import visualizations as viz
 from typing import Dict, List
 
-# Import color utilities
-from visualizations import COLOR_PALETTE, get_group_color
+# Import modules - NLTK download will happen lazily in sentiment_analysis when needed
+# Wrap imports in try-except to prevent silent failures
+try:
+    import data_processing as dp
+    import sentiment_analysis as sa
+    import visualizations as viz
+    # Import color utilities
+    from visualizations import COLOR_PALETTE, get_group_color
+except Exception as e:
+    st.error(f"Error importing modules: {str(e)}")
+    st.exception(e)
+    st.stop()
 
 # Cache data loading
 @st.cache_data(ttl=3600)  # Cache for 1 hour, but will refresh on code changes
