@@ -408,11 +408,10 @@ def apply_filters(_processed_df, _original_df, order_type, plus_customer, custom
     return filtered_processed, filtered_original
 
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
+@st.cache_data
 def compute_driver_summary(_original_df, drivers, _filter_key):
     """Compute driver performance summary. Cached to avoid recalculation on scroll.
-    _filter_key is used to ensure cache invalidation when filters change.
-    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
+    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
     driver_summary = []
     for driver in drivers:
         if driver in _original_df.columns:
@@ -428,11 +427,10 @@ def compute_driver_summary(_original_df, drivers, _filter_key):
     return pd.DataFrame(driver_summary) if driver_summary else pd.DataFrame()
 
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
+@st.cache_data
 def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     """Compute driver impact on CSAT. Cached to avoid recalculation on scroll.
-    _filter_key is used to ensure cache invalidation when filters change.
-    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
+    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
     driver_csat = []
     if 'CSAT_numeric' not in _processed_df.columns:
         return pd.DataFrame()
@@ -458,11 +456,10 @@ def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     return pd.DataFrame(driver_csat) if driver_csat else pd.DataFrame()
 
 
-@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
+@st.cache_data
 def compute_comparison_data(_processed_df, comparison_metrics, group_col, _filter_key):
     """Compute comparison data for group comparisons. Cached to avoid recalculation.
-    _filter_key is used to ensure cache invalidation when filters change.
-    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
+    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
     comparison_data = []
     if group_col not in _processed_df.columns:
         return pd.DataFrame()
@@ -957,8 +954,16 @@ def main():
             
             # Create driver summary using cached function
             # Create a filter key to ensure cache updates when filters change
-            # Include dataframe length to ensure cache invalidates when filtered data changes
-            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{len(original_df)}_{len(processed_df)}"
+            # Include hash of dataframe index to ensure cache invalidates when filtered data changes
+            try:
+                # Use pandas hash function for dataframe index
+                original_hash = hash(tuple(original_df.index)) if len(original_df) > 0 else 0
+                processed_hash = hash(tuple(processed_df.index)) if len(processed_df) > 0 else 0
+            except (TypeError, ValueError):
+                # Fallback to length if hash fails
+                original_hash = len(original_df)
+                processed_hash = len(processed_df)
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{original_hash}_{processed_hash}"
             driver_df = compute_driver_summary(original_df, drivers, filter_key)
             
             # Yes percentage chart
@@ -1040,8 +1045,13 @@ def main():
         
         if value_comparison_metrics:
             # Create filter key for cache invalidation
-            # Include a hash of the dataframe to ensure cache invalidates when data changes
-            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{len(comparison_df)}"
+            # Include hash of dataframe index to ensure cache invalidates when filtered data changes
+            try:
+                comparison_hash = hash(tuple(comparison_df.index)) if len(comparison_df) > 0 else 0
+            except (TypeError, ValueError):
+                # Fallback to length if hash fails
+                comparison_hash = len(comparison_df)
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{comparison_hash}"
             
             # Group by Grocery/Restaurant
             # Only show this comparison if filter is 'All' (otherwise we're comparing within a single group)
