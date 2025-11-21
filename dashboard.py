@@ -408,10 +408,11 @@ def apply_filters(_processed_df, _original_df, order_type, plus_customer, custom
     return filtered_processed, filtered_original
 
 
-@st.cache_data
+@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
 def compute_driver_summary(_original_df, drivers, _filter_key):
     """Compute driver performance summary. Cached to avoid recalculation on scroll.
-    _filter_key is used to ensure cache invalidation when filters change."""
+    _filter_key is used to ensure cache invalidation when filters change.
+    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
     driver_summary = []
     for driver in drivers:
         if driver in _original_df.columns:
@@ -427,10 +428,11 @@ def compute_driver_summary(_original_df, drivers, _filter_key):
     return pd.DataFrame(driver_summary) if driver_summary else pd.DataFrame()
 
 
-@st.cache_data
+@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
 def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     """Compute driver impact on CSAT. Cached to avoid recalculation on scroll.
-    _filter_key is used to ensure cache invalidation when filters change."""
+    _filter_key is used to ensure cache invalidation when filters change.
+    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
     driver_csat = []
     if 'CSAT_numeric' not in _processed_df.columns:
         return pd.DataFrame()
@@ -456,10 +458,11 @@ def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     return pd.DataFrame(driver_csat) if driver_csat else pd.DataFrame()
 
 
-@st.cache_data
+@st.cache_data(hash_funcs={pd.DataFrame: lambda df: hash(tuple(df.index)) if len(df) > 0 else 0})
 def compute_comparison_data(_processed_df, comparison_metrics, group_col, _filter_key):
     """Compute comparison data for group comparisons. Cached to avoid recalculation.
-    _filter_key is used to ensure cache invalidation when filters change."""
+    _filter_key is used to ensure cache invalidation when filters change.
+    hash_funcs ensures cache invalidates when dataframe index (and thus filtered data) changes."""
     comparison_data = []
     if group_col not in _processed_df.columns:
         return pd.DataFrame()
