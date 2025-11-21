@@ -435,10 +435,16 @@ def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     if 'CSAT_numeric' not in _processed_df.columns:
         return pd.DataFrame()
     
+    # Ensure indices align between _original_df and _processed_df
+    # Both should have the same indices after filtering, but align them explicitly
+    aligned_original = _original_df.loc[_processed_df.index] if len(_processed_df) > 0 else _original_df
+    
     for driver in drivers:
-        if driver in _original_df.columns:
-            yes_mask = _original_df[driver] == 'Yes'
-            no_mask = _original_df[driver] == 'No'
+        if driver in aligned_original.columns:
+            # Create masks using aligned indices
+            yes_mask = aligned_original[driver] == 'Yes'
+            no_mask = aligned_original[driver] == 'No'
+            # Apply masks to _processed_df (indices should now match)
             yes_csat = _processed_df[yes_mask]['CSAT_numeric'].mean() if yes_mask.sum() > 0 else None
             no_csat = _processed_df[no_mask]['CSAT_numeric'].mean() if no_mask.sum() > 0 else None
             if yes_csat is not None or no_csat is not None:
@@ -948,7 +954,8 @@ def main():
             
             # Create driver summary using cached function
             # Create a filter key to ensure cache updates when filters change
-            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}"
+            # Include dataframe length to ensure cache invalidates when filtered data changes
+            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{len(original_df)}_{len(processed_df)}"
             driver_df = compute_driver_summary(original_df, drivers, filter_key)
             
             # Yes percentage chart
