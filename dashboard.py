@@ -408,10 +408,8 @@ def apply_filters(_processed_df, _original_df, order_type, plus_customer, custom
     return filtered_processed, filtered_original
 
 
-@st.cache_data
-def compute_driver_summary(_original_df, drivers, _filter_key):
-    """Compute driver performance summary. Cached to avoid recalculation on scroll.
-    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
+def compute_driver_summary(_original_df, drivers):
+    """Compute driver performance summary. Not cached to ensure it always uses current filtered data."""
     driver_summary = []
     for driver in drivers:
         if driver in _original_df.columns:
@@ -427,10 +425,8 @@ def compute_driver_summary(_original_df, drivers, _filter_key):
     return pd.DataFrame(driver_summary) if driver_summary else pd.DataFrame()
 
 
-@st.cache_data
-def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
-    """Compute driver impact on CSAT. Cached to avoid recalculation on scroll.
-    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
+def compute_driver_csat(_processed_df, _original_df, drivers):
+    """Compute driver impact on CSAT. Not cached to ensure it always uses current filtered data."""
     driver_csat = []
     if 'CSAT_numeric' not in _processed_df.columns:
         return pd.DataFrame()
@@ -456,10 +452,8 @@ def compute_driver_csat(_processed_df, _original_df, drivers, _filter_key):
     return pd.DataFrame(driver_csat) if driver_csat else pd.DataFrame()
 
 
-@st.cache_data
-def compute_comparison_data(_processed_df, comparison_metrics, group_col, _filter_key):
-    """Compute comparison data for group comparisons. Cached to avoid recalculation.
-    _filter_key includes hash of dataframe index to ensure cache invalidates when filters change."""
+def compute_comparison_data(_processed_df, comparison_metrics, group_col):
+    """Compute comparison data for group comparisons. Not cached to ensure it always uses current filtered data."""
     comparison_data = []
     if group_col not in _processed_df.columns:
         return pd.DataFrame()
@@ -478,9 +472,8 @@ def compute_comparison_data(_processed_df, comparison_metrics, group_col, _filte
 
 
 @st.cache_data
-def compute_statistical_tests(_processed_df, comparison_metrics, group_col, _filter_key):
-    """Compute statistical tests. Cached to avoid recalculation on scroll.
-    _filter_key is used to ensure cache invalidation when filters change."""
+def compute_statistical_tests(_processed_df, comparison_metrics, group_col):
+    """Compute statistical tests. Not cached to ensure it always uses current filtered data."""
     results = []
     if group_col not in _processed_df.columns:
         return results
@@ -952,19 +945,8 @@ def main():
             st.markdown("**Driver Performance:**")
             st.markdown("*Shows the percentage of customers who answered 'Yes' for each driver (e.g., right temperature, good portion size, great quality).*")
             
-            # Create driver summary using cached function
-            # Create a filter key to ensure cache updates when filters change
-            # Include hash of dataframe index to ensure cache invalidates when filtered data changes
-            try:
-                # Use pandas hash function for dataframe index
-                original_hash = hash(tuple(original_df.index)) if len(original_df) > 0 else 0
-                processed_hash = hash(tuple(processed_df.index)) if len(processed_df) > 0 else 0
-            except (TypeError, ValueError):
-                # Fallback to length if hash fails
-                original_hash = len(original_df)
-                processed_hash = len(processed_df)
-            filter_key = f"{selected_order_type}_{selected_plus}_{selected_segment}_{original_hash}_{processed_hash}"
-            driver_df = compute_driver_summary(original_df, drivers, filter_key)
+            # Create driver summary - no caching to ensure it always uses current filtered data
+            driver_df = compute_driver_summary(original_df, drivers)
             
             # Yes percentage chart
             if not driver_df.empty:
@@ -999,7 +981,7 @@ def main():
             # Driver impact on CSAT
             st.markdown("**Driver Impact on CSAT:**")
             st.markdown("*Compares average CSAT scores for customers who answered 'Yes' vs 'No' for each driver, showing which drivers have the biggest impact on satisfaction.*")
-            driver_csat_df = compute_driver_csat(processed_df, original_df, drivers, filter_key)
+            driver_csat_df = compute_driver_csat(processed_df, original_df, drivers)
             
             if not driver_csat_df.empty:
                 fig = go.Figure()
@@ -1060,7 +1042,7 @@ def main():
                 unique_groups = comparison_df['Grocery_Restaurant'].dropna().unique()
                 if len(unique_groups) > 1 or selected_order_type == 'All':
                     st.markdown("**Grocery vs Restaurant:**")
-                    comp_df = compute_comparison_data(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
+                    comp_df = compute_comparison_data(comparison_df, value_comparison_metrics, 'Grocery_Restaurant')
                     
                     if not comp_df.empty:
                         color_map = {group: get_group_color(group) for group in comp_df['Group'].unique()}
@@ -1079,7 +1061,7 @@ def main():
                         
                         # Statistical test (only if we have 2+ groups)
                         if len(unique_groups) >= 2:
-                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Grocery_Restaurant', filter_key)
+                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Grocery_Restaurant')
                             if test_results:
                                 st.markdown("**Statistical Significance:**")
                                 for result in test_results:
@@ -1117,7 +1099,7 @@ def main():
                 unique_plus_groups = comparison_df['Plus_Customer'].dropna().unique()
                 if len(unique_plus_groups) > 1 or selected_plus == 'All':
                     st.markdown("**Plus vs Non-Plus Customers:**")
-                    comp_df_raw = compute_comparison_data(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
+                    comp_df_raw = compute_comparison_data(comparison_df, value_comparison_metrics, 'Plus_Customer')
                     
                     if not comp_df_raw.empty:
                         # Map Yes/No to Plus/PAYG for display
@@ -1140,7 +1122,7 @@ def main():
                         
                         # Statistical test (only if we have 2+ groups)
                         if len(unique_plus_groups) >= 2:
-                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Plus_Customer', filter_key)
+                            test_results = compute_statistical_tests(comparison_df, value_comparison_metrics, 'Plus_Customer')
                             if test_results:
                                 st.markdown("**Statistical Significance:**")
                                 for result in test_results:
