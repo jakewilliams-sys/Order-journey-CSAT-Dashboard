@@ -1304,8 +1304,10 @@ def main():
                 
                 # Add annotations for rating numbers above bars
                 # Use xshift to offset annotations for grouped bars
-                # For 5 bars grouped, approximate xshift values: -40, -20, 0, 20, 40 pixels
-                xshift_values = [-40, -20, 0, 20, 40]  # Pixel offsets for 5 bars
+                # Fine-tuned xshift values to align with actual bar positions
+                # For 5 bars grouped: rating 1 (leftmost) to rating 5 (rightmost)
+                # Adjusted values based on feedback: 1, 2, 4, 5 were off-center
+                xshift_values = [-55, -28, 0, 28, 55]  # Pixel offsets for 5 bars, fine-tuned for center alignment
                 xshift = xshift_values[rating_idx] if rating_idx < len(xshift_values) else 0
                 
                 for question, pct in zip(rating_data['Question'], rating_data['Percentage']):
