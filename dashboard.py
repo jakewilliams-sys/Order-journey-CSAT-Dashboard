@@ -1241,6 +1241,7 @@ def main():
         # Rating Distribution Chart
         st.markdown("**Rating Distribution by Question:**")
         st.markdown("*Shows the percentage of customers who selected each rating (1-5) for each tracker question.*")
+        st.info("**Rating Scale:** 1 = Strongly Disagree, 2 = Disagree, 3 = Neutral, 4 = Agree, 5 = Strongly Agree")
         
         # Collect rating distribution data
         rating_dist_data = []
@@ -1267,20 +1268,30 @@ def main():
             # Create grouped bar chart
             fig = go.Figure()
             
+            # Rating label mapping for tracker questions (agreement scale)
+            rating_labels = {
+                1: "1: Strongly Disagree",
+                2: "2: Disagree",
+                3: "3: Neutral",
+                4: "4: Agree",
+                5: "5: Strongly Agree"
+            }
+            
             # Add a bar for each rating (1-5)
             ratings = sorted(rating_dist_df['Rating'].unique())
             colors_map = {1: '#d62728', 2: '#ff7f0e', 3: '#bcbd22', 4: '#2ca02c', 5: '#1f77b4'}  # Red to Blue gradient
             
             for rating in ratings:
                 rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
+                rating_label = rating_labels.get(rating, f'Rating {rating}')
                 fig.add_trace(go.Bar(
-                    name=f'Rating {rating}',
+                    name=rating_label,
                     x=rating_data['Question'],
                     y=rating_data['Percentage'],
                     marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
                     text=[f'{p:.1f}%<br>({c})' for p, c in zip(rating_data['Percentage'], rating_data['Count'])],
                     textposition='auto',
-                    hovertemplate='Question: %{x}<br>Rating: ' + str(rating) + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
+                    hovertemplate='Question: %{x}<br>Rating: ' + rating_label + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
                     customdata=rating_data['Count']
                 ))
             
