@@ -1332,7 +1332,8 @@ def main():
                 barmode='group',
                 xaxis_tickangle=-45,
                 legend=dict(title="Rating"),
-                annotations=annotations
+                annotations=annotations,
+                height=600  # Increase chart height for better visibility
             )
             st.plotly_chart(fig, use_container_width=True)
         
