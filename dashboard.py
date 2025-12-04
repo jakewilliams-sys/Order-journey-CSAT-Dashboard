@@ -1281,19 +1281,40 @@ def main():
             ratings = sorted(rating_dist_df['Rating'].unique())
             colors_map = {1: '#d62728', 2: '#ff7f0e', 3: '#bcbd22', 4: '#2ca02c', 5: '#1f77b4'}  # Red to Blue gradient
             
+            # Store annotations for rating numbers above bars
+            annotations = []
+            
             for rating in ratings:
                 rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
                 rating_label = rating_labels.get(rating, f'Rating {rating}')
+                bar_color = colors_map.get(rating, COLOR_PALETTE['primary'][0])
+                
                 fig.add_trace(go.Bar(
                     name=rating_label,
                     x=rating_data['Question'],
                     y=rating_data['Percentage'],
-                    marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
-                    text=[f'{rating}<br>{p:.1f}%' for p in rating_data['Percentage']],  # Show rating number and percentage above bar
-                    textposition='outside',  # Position text above the bar
+                    marker=dict(color=bar_color),
+                    text=[f'{p:.1f}%' for p in rating_data['Percentage']],  # Show percentage inside bar
+                    textposition='inside',  # Position text inside the bar
+                    textfont=dict(color='white', size=11),  # White text for visibility inside bars
                     hovertemplate='Question: %{x}<br>Rating: ' + rating_label + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
                     customdata=rating_data['Count']
                 ))
+                
+                # Add annotations for rating numbers above bars, colored to match bars
+                for idx, (question, pct) in enumerate(zip(rating_data['Question'], rating_data['Percentage'])):
+                    annotations.append(dict(
+                        x=question,
+                        y=pct,
+                        text=str(rating),
+                        showarrow=False,
+                        xref='x',
+                        yref='y',
+                        xanchor='center',
+                        yanchor='bottom',
+                        yshift=5,  # Position above the bar
+                        font=dict(color=bar_color, size=12, weight='bold')
+                    ))
             
             fig.update_layout(
                 title="Rating Distribution by Tracker Question",
@@ -1301,7 +1322,8 @@ def main():
                 yaxis_title="Percentage of Responses (%)",
                 barmode='group',
                 xaxis_tickangle=-45,
-                legend=dict(title="Rating")
+                legend=dict(title="Rating"),
+                annotations=annotations
             )
             st.plotly_chart(fig, use_container_width=True)
         
