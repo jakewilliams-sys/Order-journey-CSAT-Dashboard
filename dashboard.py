@@ -1284,7 +1284,7 @@ def main():
             # Store annotations for rating numbers above bars
             annotations = []
             
-            for rating in ratings:
+            for rating_idx, rating in enumerate(ratings):
                 rating_data = rating_dist_df[rating_dist_df['Rating'] == rating]
                 rating_label = rating_labels.get(rating, f'Rating {rating}')
                 bar_color = colors_map.get(rating, COLOR_PALETTE['primary'][0])
@@ -1298,11 +1298,17 @@ def main():
                     textposition='inside',  # Position text inside the bar
                     textfont=dict(color='white', size=11),  # White text for visibility inside bars
                     hovertemplate='Question: %{x}<br>Rating: ' + rating_label + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
-                    customdata=rating_data['Count']
+                    customdata=rating_data['Count'],
+                    legendgroup='ratings'  # Group all bars together
                 ))
                 
-                # Add annotations for rating numbers above bars, colored to match bars
-                for idx, (question, pct) in enumerate(zip(rating_data['Question'], rating_data['Percentage'])):
+                # Add annotations for rating numbers above bars
+                # Use xshift to offset annotations for grouped bars
+                # For 5 bars grouped, approximate xshift values: -40, -20, 0, 20, 40 pixels
+                xshift_values = [-40, -20, 0, 20, 40]  # Pixel offsets for 5 bars
+                xshift = xshift_values[rating_idx] if rating_idx < len(xshift_values) else 0
+                
+                for question, pct in zip(rating_data['Question'], rating_data['Percentage']):
                     annotations.append(dict(
                         x=question,
                         y=pct,
@@ -1312,8 +1318,9 @@ def main():
                         yref='y',
                         xanchor='center',
                         yanchor='bottom',
-                        yshift=5,  # Position above the bar
-                        font=dict(color=bar_color, size=12, weight='bold')
+                        yshift=8,  # Position above the bar
+                        xshift=xshift,  # Offset for grouped bar position
+                        font=dict(color=bar_color, size=14, weight='bold')
                     ))
             
             fig.update_layout(
