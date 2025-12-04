@@ -1289,8 +1289,8 @@ def main():
                     x=rating_data['Question'],
                     y=rating_data['Percentage'],
                     marker=dict(color=colors_map.get(rating, COLOR_PALETTE['primary'][0])),
-                    text=[f'{p:.1f}%<br>({c})' for p, c in zip(rating_data['Percentage'], rating_data['Count'])],
-                    textposition='auto',
+                    text=[f'{rating}<br>{p:.1f}%' for p in rating_data['Percentage']],  # Show rating number and percentage above bar
+                    textposition='outside',  # Position text above the bar
                     hovertemplate='Question: %{x}<br>Rating: ' + rating_label + '<br>Percentage: %{y:.1f}%<br>Count: %{customdata}<extra></extra>',
                     customdata=rating_data['Count']
                 ))
